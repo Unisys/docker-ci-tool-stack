@@ -14,9 +14,14 @@ services:
       - nexus-data:/nexus-data
   jenkins:
     image: paruff/jenkins
-    restart: always
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
     ports:
-      - "8082:8080"
+      - "8080:8080"
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -41,8 +46,8 @@ services:
     image: sonarqube:lts-alpine
     restart: always
     ports:
-     - "19000:9000"
-     - "19092:9092"
+     - "9000:9000"
+     - "9092:9092"
     depends_on:
       - sonardb
     environment:
@@ -70,3 +75,42 @@ services:
 #      - /opt/gitlab/config:/etc/gitlab
 #      - /opt/gitlab/logs:/var/log/gitlab
 #      - /opt/gitlab/data:/var/opt/gitlab
+
+  zap:
+    image: owasp/zap2docker-live
+
+  anchore:
+    image: anchore/jenkins
+
+  prom:
+    image: quay.io/prometheus/prometheus:v2.0.0
+    volumes:
+     - ./monitor/prometheus.yml:/etc/prometheus/prometheus.yml
+    command: "--config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus"
+    ports:
+     - 9090:9090
+    depends_on:
+     - exporter
+  exporter:
+    image: prom/node-exporter:latest
+    ports:
+     - "9100:9100"
+#    network_mode: host
+  grafana:
+    image: grafana/grafana
+    ports:
+     - "3000:3000"
+    depends_on:
+    - prom
+
+
+  visualizer:
+    image: dockersamples/visualizer:stable
+    ports:
+      - "8079:8080"
+    stop_grace_period: 1m30s
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    deploy:
+      placement:
+        constraints: [node.role == manager]
